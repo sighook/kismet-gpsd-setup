@@ -1,0 +1,60 @@
+services:
+  gpsd:
+    build:
+      context: ./gpsd
+    restart: unless-stopped
+    ports:
+      - "29998:29998/udp" # Android app sends GPS data here
+      - "127.0.0.1:2947:2947/tcp" # GPSD daemon port for local Kismet access
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s = socket.socket(); s.connect(('127.0.0.1', 2947))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  kismet:
+    build:
+      context: ./kismet
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    environment:
+      KISMET_INTERFACE: ${KISMET_INTERFACE:?Set KISMET_INTERFACE in .env}
+      KISMET_USER: ${KISMET_USER:?Set KISMET_USER in .env}
+      KISMET_PASSWORD: ${KISMET_PASSWORD:?Set KISMET_PASSWORD in .env}
+    volumes:
+      - ./data/kismet_logs:/runs
+    depends_on:
+      gpsd:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2501/', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+
+  kismon:
+    profiles: [gui]
+    build:
+      context: ./kismon
+      args:
+        KISMON_UID: ${KISMON_UID:-1000}
+        KISMON_GID: ${KISMON_GID:-1000}
+    network_mode: host
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      XAUTHORITY: /tmp/.Xauthority
+      HOME: /home/kismon
+      KISMET_USER: ${KISMET_USER:?Set KISMET_USER in .env}
+      KISMET_PASSWORD: ${KISMET_PASSWORD:?Set KISMET_PASSWORD in .env}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.Xauthority:ro
+      - ./data/kismon_config:/home/kismon/.kismon:rw
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      kismet:
+        condition: service_healthy
