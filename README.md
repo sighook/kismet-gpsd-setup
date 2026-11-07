@@ -237,26 +237,32 @@ the receiver has a valid satellite fix. Check in this order:
 
 ## Updating
 
-The Kismet image is based on `finchsec/kismet:latest`, a mutable tag. Kismon
-and `python-kismet-rest` revisions are pinned in `kismon/Dockerfile`. Before
-updating, back up `data/kismet_logs/` and check whether Kismon works with the
-Kismet version being pulled. The Kismon upstream README documents known
-compatibility only through Kismet `2020-12-R3`, so treat the GUI as optional
-until its REST connection has been verified.
+The Kismet image installs upstream Kismet packages from the official Ubuntu
+24.04 Noble **release** repository, not an unmaintained Docker Hub image. The
+Kismet package and the Wi-Fi capture helper are pinned to `2026-10-R1` in
+`kismet/Dockerfile`. To update Kismet, change `KISMET_VERSION` deliberately,
+then rebuild. Ubuntu base-image and OS dependency versions remain unpinned;
+this is a Kismet package-version pin, not a byte-for-byte reproducible image.
 
-To rebuild after changing a Dockerfile or deliberately updating the pinned
-source revisions:
+Before upgrading, back up `data/kismet_logs/`. Kismet `2026-10-R1` writes
+kismetdb format version 11, which older tools may not read. Kismon and
+`python-kismet-rest` revisions remain pinned in `kismon/Dockerfile`; Kismon's
+published compatibility list goes only through Kismet `2020-12-R3`. Test the
+optional GUI connection rather than assuming compatibility.
+
+Rebuild and restart only Kismet:
 
 ```sh
-docker compose --profile gui up --build -d
+docker compose config --quiet
+docker compose build --pull kismet
+docker compose up -d kismet
+docker compose ps -a
+docker compose logs --tail=100 kismet gpsd
 ```
 
-To explicitly pull a newer base image before rebuilding:
-
-```sh
-docker compose --profile gui build --pull
-docker compose --profile gui up -d
-```
+Verify the web UI at `http://127.0.0.1:2501/`, Wi-Fi datasource, GPS fix and
+new recordings before using the setup in the field. The packaged Kismet binary
+is `/usr/bin/kismet`, with configuration under `/etc/kismet/`.
 
 ## Scope and authorization
 
